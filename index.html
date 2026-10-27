@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Skyforge Quest</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101923;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+#game{position:fixed;inset:0}canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 2px 4px #000}
+.panel{background:linear-gradient(135deg,#0b1825dd,#102a36bb);border:1px solid #b9e4ed55;border-radius:12px;padding:9px 12px;backdrop-filter:blur(5px)}
+#top{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+#title{font-weight:900;letter-spacing:.08em;font-size:clamp(13px,3vw,20px);color:#d8f5ff}
+#stats{font-size:12px;line-height:1.65}#objective{font-size:12px;max-width:48vw;text-align:right}
+#toast{position:absolute;top:24%;left:50%;transform:translateX(-50%);font-weight:800;font-size:14px;background:#06131cbb;border:1px solid #d6f8ff55;padding:9px 15px;border-radius:10px;opacity:0;transition:opacity .2s;text-align:center;max-width:85vw}
+#bottom{position:absolute;bottom:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+#joystick{width:118px;height:118px;border:2px solid #d8f5ff66;border-radius:50%;background:#07151e66;position:relative;pointer-events:auto;flex-shrink:0}
+#knob{position:absolute;width:47px;height:47px;border-radius:50%;background:#c8f2ff77;border:2px solid #e9fbff;left:33px;top:33px}
+#actions{display:flex;gap:8px;align-items:flex-end;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
+.action{min-width:61px;height:57px;border-radius:14px;border:1px solid #e3f8ff88;background:#0c2638c9;color:white;font-size:11px;font-weight:800;padding:5px;touch-action:none}
+.action b{display:block;font-size:21px;line-height:24px}
+#help{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);text-align:center;font-size:12px;opacity:.8;max-width:80%;transition:opacity 1s}
+#crosshair{position:absolute;left:50%;top:50%;width:10px;height:10px;transform:translate(-50%,-50%);border:1px solid #fff;border-radius:50%;opacity:.8}
+#barwrap{width:112px;height:7px;background:#ffffff35;border-radius:9px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:5px}
+#healthbar{height:100%;width:100%;background:#5ff0a1}
+#craftbox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:none;pointer-events:auto;width:min(320px,88vw)}
+#craftbox h3{margin:0 0 8px}#craftbox p{font-size:13px}#craftbox button{width:100%;margin-top:7px}
+@media(min-width:800px){#joystick{width:140px;height:140px}#knob{left:42px;top:42px} .action{min-width:75px;height:66px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud">
+ <div id="top">
+  <div class="panel"><div id="title">✦ SKYFORGE QUEST</div><div id="stats">❤️ <span id="hp">100</span>/100 <span id="barwrap"><span id="healthbar"></span></span><br>🪵 Wood: <span id="wood">0</span> &nbsp; 🪨 Stone: <span id="stone">0</span><br>🌤️ Day <span id="day">1</span></div></div>
+  <div class="panel" id="objective">SURVIVE THE FLOATING WILDS<br><span id="goal">Gather wood and stone to build a shelter.</span></div>
+ </div>
+ <div id="crosshair"></div><div id="toast"></div>
+ <div id="help">Drag the right side to look around<br>Use the joystick to move</div>
+ <div id="bottom">
+  <div id="joystick"><div id="knob"></div></div>
+  <div id="actions">
+   <button class="action" id="gather"><b>✚</b>GATHER</button>
+   <button class="action" id="attack"><b>⚔</b>ATTACK</button>
+   <button class="action" id="build"><b>⌂</b>BUILD</button>
+   <button class="action" id="jump"><b>↑</b>JUMP</button>
+  </div>
+ </div>
+ <div id="craftbox" class="panel"><h3>🏕️ Build a shelter</h3><p>Spend 4 wood and 2 stone to place a safe little cabin near you.</p><button class="action" id="confirmBuild">BUILD SHELTER</button><button class="action" id="cancelBuild">CANCEL</button></div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+
+const root=document.querySelector('#game');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9dc9df); scene.fog=new THREE.Fog(0x9dc9df,28,100);
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,180);
+camera.position.set(0,1.7,5);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.35));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+root.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xcceaff,0x4d6046,2.0));
+const sun=new THREE.DirectionalLight(0xffe4bb,3.1);sun.position.set(-15,25,12);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-35;sun.shadow.camera.right=35;sun.shadow.camera.top=35;sun.shadow.camera.bottom=-35;scene.add(sun);
+const mat=(c,r=.9,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+const grass=mat(0x567d48), dirt=mat(0x695b48), rock=mat(0x687c83), bark=mat(0x60432d), leaves=mat(0x2e6546), leaf2=mat(0x4e8150), water=mat(0x2f9eb8,.3,.15), woodMat=mat(0x9b7045), crystal=mat(0x63e4ef,.25,.2);
+// Small, optional real grass texture from OpenGameArt. If the host blocks it,
+// the scene safely keeps its built-in material colours.
+const texLoader=new THREE.TextureLoader();
+texLoader.load('https://opengameart.org/sites/default/files/grass_0_0.png', tex=>{
+  tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(18,18); tex.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+  grass.map=tex; grass.color.set(0xffffff); grass.needsUpdate=true;
+}, undefined, ()=>console.info('Optional grass texture unavailable; using fallback material.'));
+// Procedural bark grain adds surface detail without another download.
+function grainTexture(base, line, seed=1){const c=document.createElement('canvas');c.width=128;c.height=128;const g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,128,128);let n=seed;for(let i=0;i<210;i++){n=(n*1664525+1013904223)>>>0;const x=n%128;n=(n*1664525+1013904223)>>>0;const y=n%128;n=(n*1664525+1013904223)>>>0;g.globalAlpha=.08+(n%30)/100;g.strokeStyle=line;g.lineWidth=1+(n%3);g.beginPath();g.moveTo(x,y);g.lineTo(x+((n%9)-4),y+8+(n%24));g.stroke()}g.globalAlpha=1;const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(1,2);return t}
+bark.map=grainTexture('#60432d','#c39a68'); bark.needsUpdate=true;
+const ground=new THREE.Mesh(new THREE.BoxGeometry(100,2,100),dirt);ground.position.y=-1.15;ground.receiveShadow=true;scene.add(ground);
+const top=new THREE.Mesh(new THREE.BoxGeometry(100,.35,100),grass);top.position.y=-.15;top.receiveShadow=true;scene.add(top);
+// floating cliffs visible at the edge
+for(let i=0;i<7;i++){const a=i/7*Math.PI*2;const x=Math.cos(a)*38,z=Math.sin(a)*38;const island=new THREE.Mesh(new THREE.ConeGeometry(5+Math.random()*3,13,7),dirt);island.position.set(x,-6,z);island.rotation.y=Math.random()*2;scene.add(island);const cap=new THREE.Mesh(new THREE.CylinderGeometry(4,5,1,8),grass);cap.position.set(x,-.1,z);scene.add(cap)}
+// distant floating islands and towers
+for(let i=0;i<9;i++){let x=(Math.random()-.5)*85,z=-20-Math.random()*55,y=5+Math.random()*18;const rockM=new THREE.Mesh(new THREE.ConeGeometry(2+Math.random()*3,7,6),dirt);rockM.position.set(x,y,z);scene.add(rockM);const topM=new THREE.Mesh(new THREE.CylinderGeometry(2,2.8,.5,7),grass);topM.position.set(x,y+3,z);scene.add(topM)}
+// trees, rocks, crystal resources
+const resources=[];
+function tree(x,z){const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.22,.36,2.5,7),bark);trunk.position.set(x,1.05,z);trunk.castShadow=true;scene.add(trunk);for(let j=0;j<3;j++){const crown=new THREE.Mesh(new THREE.ConeGeometry(1.2-j*.18,2.4,7),j===1?leaf2:leaves);crown.position.set(x,2.4+j*.62,z);crown.castShadow=true;scene.add(crown)}resources.push({x,z,type:'wood',mesh:trunk,hp:3})}
+function boulder(x,z){const mesh=new THREE.Mesh(new THREE.DodecahedronGeometry(.75+Math.random()*.4,0),rock);mesh.position.set(x,.45,z);mesh.scale.y=.8;mesh.castShadow=true;scene.add(mesh);resources.push({x,z,type:'stone',mesh,hp:3})}
+for(let i=0;i<45;i++){let x=(Math.random()-.5)*70,z=(Math.random()-.5)*70;if(Math.hypot(x,z)<5)continue;if(i%3)tree(x,z);else boulder(x,z)}
+// path and stream
+const path=new THREE.Mesh(new THREE.BoxGeometry(4,.025,34),mat(0x9d8b6a));path.position.set(0,.04,-12);scene.add(path);
+const stream=new THREE.Mesh(new THREE.BoxGeometry(7,.04,18),water);stream.position.set(-15,.03,-17);scene.add(stream);
+// ruins and a glowing portal
+const ruin=mat(0x8a9996);for(let i=0;i<5;i++){const col=new THREE.Mesh(new THREE.BoxGeometry(.7,4,.7),ruin);col.position.set(8+(i%3)*1.5,1.8,-17+Math.floor(i/3)*2);col.castShadow=true;scene.add(col)}
+const ring=new THREE.Mesh(new THREE.TorusGeometry(1.3,.12,8,24),crystal);ring.position.set(10,2,-19);scene.add(ring);const glow=new THREE.PointLight(0x47eaff,9,8);glow.position.set(10,2,-19);scene.add(glow);
+// cabin placements
+const shelters=[];
+function cabin(pos){const g=new THREE.Group();const base=new THREE.Mesh(new THREE.BoxGeometry(3,.2,2.6),woodMat);base.position.y=.1;g.add(base);for(const x of [-1.35,1.35])for(const z of [-1.15,1.15]){const p=new THREE.Mesh(new THREE.BoxGeometry(.18,2.1,.18),bark);p.position.set(x,1.15,z);g.add(p)}for(let y=.45;y<2;y+=.42){const wall=new THREE.Mesh(new THREE.BoxGeometry(2.8,.28,2.3),woodMat);wall.position.y=y;g.add(wall)}const roof=new THREE.Mesh(new THREE.ConeGeometry(2.2,1.2,4),bark);roof.position.y=2.6;roof.rotation.y=Math.PI/4;g.add(roof);g.position.copy(pos);scene.add(g);shelters.push(g)}
+const player={pos:new THREE.Vector3(0,0,5),yaw:0,pitch:0,hp:100,wood:0,stone:0,day:1,vy:0,grounded:true};
+let yaw=0,pitch=0,joy={x:0,y:0},drag=null,lookPointer=null, lastLookX=0,lastLookY=0,toastTimer=0,night=0,enemy=null,enemyHP=3,enemyCooldown=0,damageCooldown=0;
+const hpEl=document.querySelector('#hp'),woodEl=document.querySelector('#wood'),stoneEl=document.querySelector('#stone'),goalEl=document.querySelector('#goal'),toastEl=document.querySelector('#toast');
+function toast(s){toastEl.textContent=s;toastEl.style.opacity=1;toastTimer=2.2}
+function sync(){hpEl.textContent=Math.max(0,Math.round(player.hp));woodEl.textContent=player.wood;stoneEl.textContent=player.stone;document.querySelector('#healthbar').style.width=Math.max(0,player.hp)+'%'}
+function dist(a,b){return Math.hypot(a.x-b.x,a.z-b.z)}
+function closest(){let best=null,bd=5;for(const r of resources){if(r.hp<=0)continue;const d=dist(player.pos,r);if(d<bd){bd=d;best=r}}return best}
+function gather(){const r=closest();if(!r){toast('Move closer to a tree or boulder.');return}r.hp--;if(r.hp<=0){scene.remove(r.mesh);if(r.type==='wood'){player.wood+=3;toast('+3 wood')}else{player.stone+=2;toast('+2 stone')} }else toast('Gathering... ('+r.hp+' hits left)');sync();goalEl.textContent=player.wood>=4&&player.stone>=2?'You have enough materials. Build a shelter!':'Gather wood and stone to build a shelter.'}
+function build(){document.querySelector('#craftbox').style.display='block'}
+function doBuild(){if(player.wood<4||player.stone<2){toast('Need 4 wood and 2 stone first!');return}player.wood-=4;player.stone-=2;const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const pos=player.pos.clone().addScaledVector(forward,3);pos.y=0;cabin(pos);sync();document.querySelector('#craftbox').style.display='none';goalEl.textContent='Shelter built! Explore the ruins and find the glowing portal.';toast('Shelter built! You are a survival legend.')}
+document.querySelector('#gather').onclick=gather;document.querySelector('#build').onclick=build;document.querySelector('#confirmBuild').onclick=doBuild;document.querySelector('#cancelBuild').onclick=()=>document.querySelector('#craftbox').style.display='none';
+function spawnEnemy(){if(enemy)scene.remove(enemy);enemy=new THREE.Group();const body=new THREE.Mesh(new THREE.DodecahedronGeometry(.65,1),mat(0x4e5966,.6));body.position.y=1;body.castShadow=true;enemy.add(body);const eyeMat=new THREE.MeshBasicMaterial({color:0xff4545});for(const x of [-.22,.22]){const e=new THREE.Mesh(new THREE.SphereGeometry(.09,8,8),eyeMat);e.position.set(x,1.12,-.53);body.add(e)}const hornmat=mat(0x29313a);for(const x of [-.35,.35]){const h=new THREE.Mesh(new THREE.ConeGeometry(.14,.5,6),hornmat);h.position.set(x,1.6,0);h.rotation.z=x<0?.4:-.4;enemy.add(h)}enemy.position.set(player.pos.x+12,0,player.pos.z-12);scene.add(enemy);enemyHP=3}
+function attack(){if(!enemy){spawnEnemy();toast('A wild sky-creature appears!');return}const d=dist(player.pos,enemy.position);const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const to=enemy.position.clone().sub(player.pos).normalize();if(d<4&&forward.dot(to)>.25){enemyHP--;toast('Hit! '+enemyHP+' strength left');if(enemyHP<=0){scene.remove(enemy);enemy=null;player.wood+=2;player.stone+=1;sync();toast('Creature defeated! +2 wood, +1 stone')} }else toast('Face the creature and get closer!')}
+document.querySelector('#attack').onclick=attack;
+document.querySelector('#jump').onclick=()=>{if(player.grounded){player.vy=7;player.grounded=false}};
+const joyEl=document.querySelector('#joystick'),knob=document.querySelector('#knob');
+function setJoy(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy,l=Math.hypot(dx,dy),max=r.width*.35;if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;knob.style.transform=`translate(${dx}px,${dy}px)`}
+joyEl.addEventListener('pointerdown',e=>{drag=e.pointerId;joyEl.setPointerCapture(drag);setJoy(e)});joyEl.addEventListener('pointermove',e=>{if(e.pointerId===drag)setJoy(e)});function endJoy(){drag=null;joy={x:0,y:0};knob.style.transform='translate(0,0)'}joyEl.addEventListener('pointerup',endJoy);joyEl.addEventListener('pointercancel',endJoy);
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.clientX<innerWidth*.34&&e.clientY>innerHeight*.55)return;lookPointer=e.pointerId;lastLookX=e.clientX;lastLookY=e.clientY;renderer.domElement.setPointerCapture(e.pointerId);document.querySelector('#help').style.opacity=0});
+renderer.domElement.addEventListener('pointermove',e=>{if(lookPointer===e.pointerId){yaw-=(e.clientX-lastLookX)*.005;pitch-=(e.clientY-lastLookY)*.004;pitch=THREE.MathUtils.clamp(pitch,-1.1,1.1);lastLookX=e.clientX;lastLookY=e.clientY}});
+function endLook(e){if(lookPointer===e.pointerId)lookPointer=null}renderer.domElement.addEventListener('pointerup',endLook);renderer.domElement.addEventListener('pointercancel',endLook);
+const keys=new Set();
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();keys.add(k);if(k===' ')document.querySelector('#jump').click();if(k==='e')gather();if(k==='f')attack();if(k==='b')build()});
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+let prev=performance.now(),elapsed=0;
+function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-prev)/1000,.04);prev=now;elapsed+=dt;
+const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));let jx=joy.x,jy=joy.y;if(keys.has('w')||keys.has('arrowup'))jy=-1;if(keys.has('s')||keys.has('arrowdown'))jy=1;if(keys.has('a')||keys.has('arrowleft'))jx=-1;if(keys.has('d')||keys.has('arrowright'))jx=1;const move=forward.clone().multiplyScalar(-jy).addScaledVector(right,jx);if(move.length()>1)move.normalize();player.pos.addScaledVector(move,dt*5.2);player.pos.x=THREE.MathUtils.clamp(player.pos.x,-46,46);player.pos.z=THREE.MathUtils.clamp(player.pos.z,-46,46);
+player.vy-=18*dt;player.pos.y+=player.vy*dt;if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.grounded=true}
+camera.position.set(player.pos.x,player.pos.y+1.65,player.pos.z);camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;
+if(enemy){const d=dist(player.pos,enemy.position);if(d>1.8){enemy.position.x+=(player.pos.x-enemy.position.x)/d*dt*1.35;enemy.position.z+=(player.pos.z-enemy.position.z)/d*dt*1.35}else{damageCooldown-=dt;if(damageCooldown<=0){player.hp=Math.max(0,player.hp-7);damageCooldown=1.2;sync();toast('The sky-creature hit you!');if(player.hp<=0){player.hp=100;player.pos.set(0,0,5);scene.remove(enemy);enemy=null;sync();toast('You recovered at camp. Keep exploring!')}}}enemy.rotation.y=Math.atan2(player.pos.x-enemy.position.x,player.pos.z-enemy.position.z)}
+sun.position.x=Math.sin(elapsed*.04)*20-10;ring.rotation.y+=dt*.5;glow.intensity=7+Math.sin(elapsed*3)*2;
+if(elapsed>90&&player.day===1){player.day=2;document.querySelector('#day').textContent=2;scene.background.set(0x34445f);scene.fog.color.set(0x34445f);sun.intensity=1.1;toast('Night falls over the floating wilds...');spawnEnemy()}
+if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)toastEl.style.opacity=0}
+renderer.render(scene,camera)}
+requestAnimationFrame(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+sync();toast('Welcome, survivor. Gather resources and build your shelter!');
+</script>
+</body>
+</html>
